@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "Browser Agent",
+  "version": "0.1.0",
+  "description": "AI assistant for sites with llms.txt skills",
+  "permissions": [
+    "sidePanel",
+    "tabs",
+    "storage",
+    "activeTab",
+    "scripting",
+    "declarativeNetRequestWithHostAccess"
+  ],
+  "host_permissions": ["http://localhost:11434/*", "https://*/*"],
+  "side_panel": {
+    "default_path": "src/sidepanel/index.html"
+  },
+  "action": {
+    "default_title": "Open Browser Agent",
+    "default_popup": "src/sidepanel/index.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+E",
+        "mac": "Command+Shift+E"
+      },
+      "description": "Open Browser Agent"
+    }
+  },
+  "background": {
+    "service_worker": "src/background/index.ts",
+    "type": "module"
+  }
+}

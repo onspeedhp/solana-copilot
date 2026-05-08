@@ -13,15 +13,52 @@ ai: ✓ posted
 
 ---
 
-## What it actually is
+## It's not a chatbot. It's an agent in your browser.
 
-A Chrome MV3 extension that puts an AI chat in your browser side panel and gives it:
+A chatbot answers questions.
+This signs Solana transactions, posts tweets, fills forms — in the same tab you're already browsing.
 
-- **A real Solana wallet** — local keypair in `chrome.storage`. SOL transfers, Jupiter swaps, arbitrary versioned-tx signing.
-- **Site-aware skills** — when you're on Jupiter / Kamino / X / Pump.fun / DEX Screener / Solscan, it gets per-site tools and a clean DOM extractor.
-- **Drop-in extensibility** — add a new site in one file. The loader auto-discovers it.
+You type a sentence. The agent picks the right tool (swap, post, lookup, navigate), shows you a preview card, you tap approve once. The action runs. On-chain. In your timeline. Real.
+
+The chat is just the interface. The capability is:
+
+- **A local Solana wallet** — keypair in `chrome.storage`. Sends SOL, swaps via Jupiter, signs arbitrary versioned txns.
+- **Reading the actual DOM** of the page you're on. Structured tweets with metrics, Kamino vault tables, Jupiter swap state — extracted clean (no LLM-hallucinating-from-noise).
+- **Driving the page** via DOM macros: `xPostTweet` opens compose, fills, clicks submit — one approval, end-to-end.
+- **Calling site APIs** directly (Jupiter v6, Kamino, Pump.fun, Solscan, DEX Screener) via per-site skill files.
+- **Drop-in extensibility** — `apps/extension/src/lib/skills/<name>.ts`. The loader auto-discovers via `import.meta.glob`. No registry edit.
 
 No backend. No tracking. Open source.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  user([You])
+  panel[Side Panel<br/>chat UI]
+  bg[Background SW<br/>OAuth · streaming<br/>declarativeNetRequest]
+  claude[Anthropic API<br/>Claude Sonnet 4.5]
+  skills[Skills<br/>auto-discovered<br/>jupiter · kamino · x · ...]
+  tab[Active Tab<br/>DOM · page-world scripts]
+  apis[Site APIs<br/>jup.ag · kamino · pump.fun]
+  rpc[Solana RPC<br/>Helius]
+  chain[(Solana mainnet)]
+
+  user -->|"types a sentence"| panel
+  panel <-->|tool calls + stream| bg
+  bg <-.->|"Bearer token<br/>(API key OR Pro/Max OAuth)"| claude
+  panel -->|extractDom · macros| tab
+  panel -->|httpGet/Post| apis
+  panel -->|sendSol · swap · signTx| rpc
+  rpc --> chain
+
+  classDef ext fill:#1c1c1c,stroke:#7c3aed,color:#fff
+  classDef cloud fill:#0a0a0a,stroke:#666,color:#fff
+  class panel,bg,skills ext
+  class claude,apis,rpc,chain cloud
+```
+
+Three planes meet here: **the LLM** (Claude), **the browser** (DOM of whatever you're on), **the chain** (Solana wallet). The extension is the glue.
 
 ## Demo
 

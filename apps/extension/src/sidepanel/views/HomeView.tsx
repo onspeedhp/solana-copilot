@@ -79,6 +79,15 @@ export function HomeView({
         onClearChat={onClearChat}
         stats={stats}
       />
+      {hasMessages && (
+        <QuickActionsBar
+          integration={integration}
+          currentUrl={currentUrl}
+          stats={stats}
+          disabled={isStreaming}
+          onSuggestionClick={onSuggestionClick}
+        />
+      )}
       {hasMessages ? (
         <MessageList
           messages={messages}
@@ -400,6 +409,59 @@ function EmptyChat({
                 className="text-white/40 flex-shrink-0"
               />
               <span>{s.text}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Always-on horizontal chip strip showing actions relevant to the current
+// page. Sits between the wallet strip and the message list when chat has
+// content. Hidden if there's nothing site-specific to suggest.
+function QuickActionsBar({
+  integration,
+  currentUrl,
+  stats,
+  disabled,
+  onSuggestionClick,
+}: {
+  integration: SiteIntegration | null;
+  currentUrl: string | undefined;
+  stats: ReturnType<typeof useWalletStats>;
+  disabled: boolean;
+  onSuggestionClick: (text: string) => void;
+}) {
+  const suggestions = buildDynamicSuggestions(integration, currentUrl, stats);
+  // On non-integration sites with no wallet stats, suggestions fall back to
+  // the static FALLBACK list which is too generic to be useful here. Hide.
+  if (!integration && (!stats?.stats || suggestions.length === 0)) return null;
+  if (suggestions.length === 0) return null;
+
+  return (
+    <div className="px-4 py-2 border-b border-white/[0.05] flex-shrink-0">
+      <div
+        className="flex gap-1.5 overflow-x-auto"
+        style={{ scrollbarWidth: 'none' }}
+      >
+        {suggestions.map((s) => {
+          const Icon = SUGGESTION_ICONS[s.icon];
+          return (
+            <button
+              type="button"
+              key={s.text}
+              disabled={disabled}
+              onClick={() => onSuggestionClick(s.text)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] disabled:opacity-50 disabled:cursor-not-allowed border border-white/[0.06] rounded-md text-[11px] text-white/75 hover:text-white/95 transition-colors duration-150 whitespace-nowrap flex-shrink-0"
+              title={s.text}
+            >
+              <Icon
+                size={11}
+                strokeWidth={1.7}
+                className="text-white/40 flex-shrink-0"
+              />
+              <span className="truncate max-w-[180px]">{s.text}</span>
             </button>
           );
         })}

@@ -785,33 +785,85 @@ async function xPostTweetFn(
   text: string,
 ): Promise<{ ok: boolean; step: string; error?: string }> {
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  // Find the closest mounted compose form. Returns BOTH the textarea and its
+  // matching post button so we never mix inline + modal selectors. On home
+  // page, the inline composer at top is `tweetButtonInline`; in the modal
+  // (after clicking SideNav New Tweet), it's `tweetButton`. Picking the
+  // wrong one leaves a stray modal open after submit.
+  const findComposer = (): {
+    textarea: HTMLElement | null;
+    postBtn: HTMLElement | null;
+    kind: 'modal' | 'inline' | null;
+  } => {
+    // Modal takes precedence — if it's open we're committed to it
+    const modalRoot = document.querySelector(
+      '[role="dialog"][aria-labelledby] [data-testid="tweetTextarea_0"], [aria-modal="true"] [data-testid="tweetTextarea_0"]',
+    );
+    if (modalRoot) {
+      const modal = modalRoot.closest(
+        '[role="dialog"], [aria-modal="true"]',
+      );
+      const textarea =
+        (modalRoot as HTMLElement) ??
+        (modal?.querySelector(
+          '[data-testid="tweetTextarea_0"]',
+        ) as HTMLElement | null);
+      const postBtn = modal?.querySelector(
+        'button[data-testid="tweetButton"]',
+      ) as HTMLElement | null;
+      return { textarea, postBtn, kind: 'modal' };
+    }
+    // Otherwise use the inline composer if present (home page top)
+    const inlineTextarea = document.querySelector(
+      '[data-testid="tweetTextarea_0"]',
+    ) as HTMLElement | null;
+    if (inlineTextarea) {
+      const inlinePostBtn = document.querySelector(
+        'button[data-testid="tweetButtonInline"]',
+      ) as HTMLElement | null;
+      return {
+        textarea: inlineTextarea,
+        postBtn: inlinePostBtn,
+        kind: 'inline',
+      };
+    }
+    return { textarea: null, postBtn: null, kind: null };
+  };
+
   try {
-    // 1. Open compose modal — try sidebar button first
-    const composeBtn = (document.querySelector(
-      'a[data-testid="SideNav_NewTweet_Button"]',
-    ) ??
-      document.querySelector('a[href="/compose/post"]') ??
-      document.querySelector(
-        '[data-testid="SideNav_NewTweet_Button"]',
-      )) as HTMLElement | null;
-    if (composeBtn) {
-      composeBtn.click();
+    // Step 1: ensure a composer is mounted — only click the SideNav button
+    // if NEITHER the inline composer nor a modal is already present.
+    let composer = findComposer();
+    if (!composer.textarea) {
+      const composeBtn = (document.querySelector(
+        'a[data-testid="SideNav_NewTweet_Button"]',
+      ) ??
+        document.querySelector('a[href="/compose/post"]') ??
+        document.querySelector(
+          '[data-testid="SideNav_NewTweet_Button"]',
+        )) as HTMLElement | null;
+      if (composeBtn) composeBtn.click();
+      // Wait up to 3s for the composer (modal) to render
+      for (let i = 0; i < 30; i++) {
+        await sleep(100);
+        composer = findComposer();
+        if (composer.textarea) break;
+      }
     }
-    // 2. Wait for tweetTextarea_0 to render
-    let textarea: HTMLElement | null = null;
-    for (let i = 0; i < 30; i++) {
-      textarea = document.querySelector('div[data-testid="tweetTextarea_0"]');
-      if (textarea) break;
-      await sleep(100);
-    }
-    if (!textarea) {
+    if (!composer.textarea) {
       return {
         ok: false,
         step: 'open-compose',
         error: 'Compose textarea did not render after 3s',
       };
     }
-    // 3. Focus + insert text via execCommand (works for Draft.js / Lexical)
+
+    // Step 2: focus + insert text. Draft.js (X's editor) handles `\n`
+    // unreliably inside a single execCommand('insertText') call — newlines
+    // can be swallowed or trigger spurious state changes. Split on \n and
+    // insert each line individually with explicit paragraph breaks between.
+    const textarea = composer.textarea;
     textarea.focus();
     try {
       const sel = window.getSelection();
@@ -823,45 +875,97 @@ async function xPostTweetFn(
     } catch {
       // ignore selection errors
     }
-    let inserted = false;
-    try {
-      inserted = document.execCommand('insertText', false, text);
-    } catch {
-      inserted = false;
-    }
-    if (!inserted) {
+
+    const insertLine = (line: string): boolean => {
+      if (line.length === 0) return true;
+      let ok = false;
+      try {
+        ok = document.execCommand('insertText', false, line);
+      } catch {
+        ok = false;
+      }
+      if (!ok) {
+        textarea.dispatchEvent(
+          new InputEvent('beforeinput', {
+            bubbles: true,
+            cancelable: true,
+            inputType: 'insertText',
+            data: line,
+          }),
+        );
+        textarea.textContent = (textarea.textContent ?? '') + line;
+        textarea.dispatchEvent(
+          new InputEvent('input', {
+            bubbles: true,
+            inputType: 'insertText',
+            data: line,
+          }),
+        );
+      }
+      return true;
+    };
+
+    const insertParagraphBreak = () => {
+      // Try `insertParagraph` first (proper paragraph), fall back to
+      // `insertLineBreak` (soft <br>), then to keyboard Enter event.
+      let ok = false;
+      try {
+        ok = document.execCommand('insertParagraph');
+      } catch {
+        ok = false;
+      }
+      if (ok) return;
+      try {
+        ok = document.execCommand('insertLineBreak');
+      } catch {
+        ok = false;
+      }
+      if (ok) return;
+      // Last resort: synthesize Enter key. Inside compose modal, Enter
+      // adds a paragraph break — Cmd+Enter is what submits.
+      const opts = {
+        key: 'Enter',
+        code: 'Enter',
+        keyCode: 13,
+        which: 13,
+        bubbles: true,
+        cancelable: true,
+      } as KeyboardEventInit;
+      textarea.dispatchEvent(new KeyboardEvent('keydown', opts));
+      textarea.dispatchEvent(new KeyboardEvent('keypress', opts));
       textarea.dispatchEvent(
         new InputEvent('beforeinput', {
           bubbles: true,
           cancelable: true,
-          inputType: 'insertText',
-          data: text,
+          inputType: 'insertParagraph',
         }),
       );
-      textarea.textContent = (textarea.textContent ?? '') + text;
-      textarea.dispatchEvent(
-        new InputEvent('input', {
-          bubbles: true,
-          inputType: 'insertText',
-          data: text,
-        }),
-      );
+      textarea.dispatchEvent(new KeyboardEvent('keyup', opts));
+    };
+
+    const lines = text.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      if (i > 0) insertParagraphBreak();
+      const line = lines[i];
+      if (line) insertLine(line);
     }
-    // 4. Wait for Post button to enable
+    // Tiny pause so the editor's React state catches up before we look
+    // for the (now-enabled) Post button.
+    await sleep(50);
+
+    // Step 3: wait for the SAME-KIND post button (inline OR modal) to enable.
+    // Mixing kinds is what caused the leftover-modal bug.
     let postBtn: HTMLElement | null = null;
     for (let i = 0; i < 30; i++) {
-      const candidates = [
-        'button[data-testid="tweetButton"]',
-        'button[data-testid="tweetButtonInline"]',
-      ];
-      for (const sel of candidates) {
-        const b = document.querySelector(sel) as HTMLElement | null;
-        if (b && !b.hasAttribute('disabled')) {
-          postBtn = b;
-          break;
-        }
+      const c = findComposer();
+      if (
+        c.kind === composer.kind &&
+        c.postBtn &&
+        !c.postBtn.hasAttribute('disabled')
+      ) {
+        postBtn = c.postBtn;
+        break;
       }
-      if (postBtn) break;
       await sleep(100);
     }
     if (!postBtn) {
@@ -873,7 +977,7 @@ async function xPostTweetFn(
       };
     }
     postBtn.click();
-    return { ok: true, step: 'posted' };
+    return { ok: true, step: `posted-via-${composer.kind}` };
   } catch (e) {
     return { ok: false, step: 'unknown', error: String(e) };
   }
@@ -975,30 +1079,71 @@ async function xReplyTweetFn(
     } catch {
       // ignore
     }
-    let inserted = false;
-    try {
-      inserted = document.execCommand('insertText', false, text);
-    } catch {
-      inserted = false;
-    }
-    if (!inserted) {
+    // Insert line-by-line so Draft.js handles \n via insertParagraph
+    // instead of choking on embedded newlines (causes lost text).
+    const insertLineRep = (line: string): void => {
+      if (line.length === 0) return;
+      let ok = false;
+      try {
+        ok = document.execCommand('insertText', false, line);
+      } catch {
+        ok = false;
+      }
+      if (!ok) {
+        textarea.dispatchEvent(
+          new InputEvent('beforeinput', {
+            bubbles: true,
+            cancelable: true,
+            inputType: 'insertText',
+            data: line,
+          }),
+        );
+        textarea.textContent = (textarea.textContent ?? '') + line;
+        textarea.dispatchEvent(
+          new InputEvent('input', {
+            bubbles: true,
+            inputType: 'insertText',
+            data: line,
+          }),
+        );
+      }
+    };
+    const insertParagraphRep = (): void => {
+      try {
+        if (document.execCommand('insertParagraph')) return;
+      } catch {
+        // ignore
+      }
+      try {
+        if (document.execCommand('insertLineBreak')) return;
+      } catch {
+        // ignore
+      }
+      const opts = {
+        key: 'Enter',
+        code: 'Enter',
+        keyCode: 13,
+        which: 13,
+        bubbles: true,
+        cancelable: true,
+      } as KeyboardEventInit;
+      textarea.dispatchEvent(new KeyboardEvent('keydown', opts));
       textarea.dispatchEvent(
         new InputEvent('beforeinput', {
           bubbles: true,
           cancelable: true,
-          inputType: 'insertText',
-          data: text,
+          inputType: 'insertParagraph',
         }),
       );
-      textarea.textContent = (textarea.textContent ?? '') + text;
-      textarea.dispatchEvent(
-        new InputEvent('input', {
-          bubbles: true,
-          inputType: 'insertText',
-          data: text,
-        }),
-      );
+      textarea.dispatchEvent(new KeyboardEvent('keyup', opts));
+    };
+    const replyLines = text.split('\n');
+    for (let i = 0; i < replyLines.length; i++) {
+      if (i > 0) insertParagraphRep();
+      const ln = replyLines[i];
+      if (ln) insertLineRep(ln);
     }
+    await sleep(50);
     let postBtn: HTMLElement | null = null;
     for (let i = 0; i < 30; i++) {
       const candidates = [

@@ -280,31 +280,44 @@ export function ConfirmActionCard({
         ) : (
           <div className="px-3 py-2.5 border-t border-white/[0.05] bg-[#141414]">
             {formatted ? (
-              <pre className="text-[12px] text-white/85 leading-relaxed whitespace-pre-wrap font-sans">
+              <div className="text-[12px] text-white/85 leading-[1.55] whitespace-pre-wrap font-sans">
                 {formatted}
-              </pre>
+              </div>
             ) : (
-              <pre className="text-[11px] font-mono text-white/70 leading-relaxed whitespace-pre-wrap break-all">
-                {JSON.stringify(result, null, 2).slice(0, 600)}
-              </pre>
+              <div className="text-[12px] text-white/55 leading-relaxed">
+                <span className="text-white/40">done · </span>
+                {(() => {
+                  // Inline pretty summary for unknown shapes
+                  if (result == null) return 'no data';
+                  if (typeof result === 'string')
+                    return result.length > 200
+                      ? `${result.slice(0, 200)}…`
+                      : result;
+                  if (typeof result === 'number' || typeof result === 'boolean')
+                    return String(result);
+                  const obj = result as Record<string, unknown>;
+                  const keys = Object.keys(obj).slice(0, 4);
+                  return `${keys.length} field${keys.length === 1 ? '' : 's'}: ${keys.join(', ')}${
+                    Object.keys(obj).length > keys.length ? '…' : ''
+                  }`;
+                })()}
+              </div>
             )}
-            {formatted && (
-              <button
-                type="button"
-                onClick={() => setShowRaw((v) => !v)}
-                className="mt-2 text-[10px] text-white/30 hover:text-white/60 transition-colors duration-150 flex items-center gap-1"
-              >
-                {showRaw ? (
-                  <ChevronUp size={10} strokeWidth={1.5} />
-                ) : (
-                  <ChevronDown size={10} strokeWidth={1.5} />
-                )}
-                {showRaw ? 'hide raw' : 'raw response'}
-              </button>
-            )}
-            {showRaw && formatted && (
-              <pre className="mt-2 text-[10px] font-mono text-white/40 leading-relaxed whitespace-pre-wrap break-all max-h-[200px] overflow-y-auto">
-                {JSON.stringify(result, null, 2).slice(0, 1500)}
+            <button
+              type="button"
+              onClick={() => setShowRaw((v) => !v)}
+              className="mt-2 text-[10px] text-white/30 hover:text-white/60 transition-colors duration-150 flex items-center gap-1"
+            >
+              {showRaw ? (
+                <ChevronUp size={10} strokeWidth={1.5} />
+              ) : (
+                <ChevronDown size={10} strokeWidth={1.5} />
+              )}
+              {showRaw ? 'hide raw' : 'raw'}
+            </button>
+            {showRaw && (
+              <pre className="mt-2 text-[10px] font-mono text-white/40 leading-relaxed whitespace-pre-wrap break-all max-h-[240px] overflow-y-auto p-2 bg-[#0a0a0a] border border-white/[0.04] rounded-md">
+                {JSON.stringify(result, null, 2).slice(0, 2500)}
               </pre>
             )}
           </div>

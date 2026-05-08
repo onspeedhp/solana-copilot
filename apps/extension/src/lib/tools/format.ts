@@ -304,6 +304,146 @@ const WALLET_FORMATTERS: Record<string, WalletFormatter> = {
     });
     return [header, ...lines].join('\n');
   },
+  extractTweets(result) {
+    const r = result as {
+      ok?: boolean;
+      tweets?: Array<{
+        author?: string;
+        handle?: string;
+        text?: string;
+        time?: string;
+        link?: string;
+        pinned?: boolean;
+        isRetweet?: boolean;
+        metrics?: {
+          replies?: number | null;
+          reposts?: number | null;
+          likes?: number | null;
+          views?: number | null;
+        };
+      }>;
+      error?: string;
+    };
+    if (!r.ok) return r.error ?? 'Could not extract tweets.';
+    const tweets = r.tweets ?? [];
+    if (tweets.length === 0) {
+      return 'No tweets found on this page (scroll then try again).';
+    }
+    const fmtNum = (n: number | null | undefined): string => {
+      if (typeof n !== 'number') return '—';
+      if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+      if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
+      return String(n);
+    };
+    const lines = tweets.slice(0, 8).map((t) => {
+      const text = (t.text ?? '').slice(0, 140);
+      const m = t.metrics ?? {};
+      const meta = [
+        `${fmtNum(m.likes)}♥`,
+        `${fmtNum(m.replies)}💬`,
+        `${fmtNum(m.reposts)}🔁`,
+        `${fmtNum(m.views)}👁`,
+      ].join('  ');
+      const tag =
+        t.pinned ? ' · pinned' : t.isRetweet ? ' · retweet' : '';
+      return `${t.handle ?? '?'}${tag}\n${text}\n${meta}`;
+    });
+    const more =
+      tweets.length > 8 ? `\n…and ${tweets.length - 8} more` : '';
+    return lines.join('\n\n') + more;
+  },
+  xExtractCurrentTweet(result) {
+    const r = result as {
+      ok?: boolean;
+      tweet?: {
+        author?: string;
+        handle?: string;
+        text?: string;
+        metrics?: {
+          replies?: number | null;
+          reposts?: number | null;
+          likes?: number | null;
+          views?: number | null;
+        };
+      };
+      error?: string;
+    };
+    if (!r.ok || !r.tweet) return r.error ?? 'No tweet found.';
+    const t = r.tweet;
+    const m = t.metrics ?? {};
+    const fmt = (n: number | null | undefined): string =>
+      typeof n === 'number' ? n.toLocaleString() : '—';
+    return [
+      `${t.author ?? '?'} ${t.handle ?? ''}`,
+      t.text ?? '',
+      `${fmt(m.likes)} likes · ${fmt(m.replies)} replies · ${fmt(m.reposts)} reposts · ${fmt(m.views)} views`,
+    ].join('\n');
+  },
+  xPostTweet(result, args) {
+    const r = result as { ok?: boolean; step?: string; error?: string };
+    const text = String(args.text ?? '');
+    const preview = text.length > 80 ? `${text.slice(0, 80)}…` : text;
+    if (r.ok) return `Posted: "${preview}"`;
+    return `Could not post (${r.step ?? '?'}): ${r.error ?? 'unknown error'}`;
+  },
+  xReplyTweet(result, args) {
+    const r = result as { ok?: boolean; step?: string; error?: string };
+    const text = String(args.text ?? '');
+    const preview = text.length > 80 ? `${text.slice(0, 80)}…` : text;
+    if (r.ok) return `Replied: "${preview}"`;
+    return `Could not reply (${r.step ?? '?'}): ${r.error ?? 'unknown error'}`;
+  },
+  xLikeTweet(result) {
+    const r = result as { ok?: boolean; error?: string };
+    if (r.ok) return r.error === 'already liked' ? 'Already liked.' : 'Liked ❤';
+    return `Could not like: ${r.error ?? '?'}`;
+  },
+  xRetweetTweet(result) {
+    const r = result as { ok?: boolean; error?: string };
+    if (r.ok)
+      return r.error === 'already retweeted' ? 'Already reposted.' : 'Reposted 🔁';
+    return `Could not repost: ${r.error ?? '?'}`;
+  },
+  navigateTab(result) {
+    const r = result as { ok?: boolean; url?: string; error?: string };
+    if (!r.ok) return `Navigation failed: ${r.error ?? '?'}`;
+    try {
+      const u = new URL(r.url ?? '');
+      return `Navigated to ${u.pathname || '/'}`;
+    } catch {
+      return `Navigated to ${r.url ?? '?'}`;
+    }
+  },
+  jupiterSwapBySymbol(result, args) {
+    const r = result as {
+      simulated?: boolean;
+      signature?: string;
+      explorer?: string;
+      inputSymbol?: string;
+      outputSymbol?: string;
+      amountIn?: number;
+      amountOut?: number;
+      priceImpactPct?: number;
+      route?: string;
+    };
+    const inSym =
+      r.inputSymbol ?? String(args.inputSymbol ?? 'SOL').toUpperCase();
+    const outSym =
+      r.outputSymbol ?? String(args.outputSymbol ?? '?').toUpperCase();
+    const amountOut =
+      typeof r.amountOut === 'number'
+        ? r.amountOut.toLocaleString(undefined, { maximumFractionDigits: 4 })
+        : '?';
+    const lines = [
+      `Swap ${args.amountIn ?? r.amountIn} ${inSym} → ${amountOut} ${outSym}`,
+    ];
+    if (r.route) lines.push(`Route: ${r.route}`);
+    if (typeof r.priceImpactPct === 'number')
+      lines.push(`Impact: ${r.priceImpactPct.toFixed(3)}%`);
+    if (r.signature) lines.push(`Sig: ${shortAddr(r.signature, 6)}`);
+    if (r.simulated) lines.push('(simulated)');
+    return lines.join('\n');
+  },
 };
 
 export function formatToolResult(

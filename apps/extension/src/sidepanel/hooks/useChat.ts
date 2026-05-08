@@ -106,6 +106,40 @@ async function pickProvider(): Promise<LLMProvider> {
   return provider;
 }
 
+// Throttle streaming token patches to one update per animation frame so
+// React/markdown reconciliation doesn't run on every keystroke. With
+// ~60-100 tokens/sec from Anthropic, naive patching causes visible jank
+// because react-markdown re-parses the AST on every change.
+const pendingContent = new Map<string, string>();
+let rafScheduled = false;
+function flushPendingContent(): void {
+  rafScheduled = false;
+  if (pendingContent.size === 0) return;
+  const { patchAssistant } = useApp.getState();
+  for (const [id, content] of pendingContent) {
+    patchAssistant(id, { content });
+  }
+  pendingContent.clear();
+}
+function queueContentPatch(id: string, content: string): void {
+  pendingContent.set(id, content);
+  if (rafScheduled) return;
+  rafScheduled = true;
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(flushPendingContent);
+  } else {
+    // Fallback for environments without RAF (test runners, etc)
+    setTimeout(flushPendingContent, 16);
+  }
+}
+function flushContentNow(id: string): void {
+  if (pendingContent.has(id)) {
+    const content = pendingContent.get(id) ?? '';
+    pendingContent.delete(id);
+    useApp.getState().patchAssistant(id, { content });
+  }
+}
+
 const WALLET_TOOL_KINDS: ReadonlySet<ToolKind> = new Set<ToolKind>([
   'getBalance',
   'getTokenAccounts',
@@ -340,8 +374,10 @@ async function runAnthropicIterations(
       })) {
         if (chunk.type === 'token') {
           buffer += chunk.value;
-          patchAssistant(assistantId, { content: buffer });
+          queueContentPatch(assistantId, buffer);
         } else if (chunk.type === 'tool_call') {
+          // Make sure pending tokens are flushed before we append a tool card
+          flushContentNow(assistantId);
           const args = (chunk.args ?? {}) as Record<string, unknown>;
           let isWrite = false;
           if (isWalletTool(chunk.name)) {
@@ -378,9 +414,11 @@ async function runAnthropicIterations(
             });
           }
         } else if (chunk.type === 'done') {
+          flushContentNow(assistantId);
           patchAssistant(assistantId, { streaming: false });
           break;
         } else if (chunk.type === 'error') {
+          flushContentNow(assistantId);
           patchAssistant(assistantId, {
             streaming: false,
             content: buffer
@@ -392,6 +430,8 @@ async function runAnthropicIterations(
         }
       }
     } finally {
+      // Flush any remaining queued tokens before clearing streaming flag
+      flushContentNow(assistantId);
       patchAssistant(assistantId, { streaming: false });
     }
 
@@ -554,8 +594,9 @@ async function runSingleShot(
     })) {
       if (chunk.type === 'token') {
         buffer += chunk.value;
-        patchAssistant(assistantId, { content: buffer });
+        queueContentPatch(assistantId, buffer);
       } else if (chunk.type === 'tool_call') {
+        flushContentNow(assistantId);
         const args = (chunk.args ?? {}) as Record<string, unknown>;
         let isWrite = false;
         if (isWalletTool(chunk.name)) {
@@ -592,9 +633,11 @@ async function runSingleShot(
           });
         }
       } else if (chunk.type === 'done') {
+        flushContentNow(assistantId);
         patchAssistant(assistantId, { streaming: false });
         break;
       } else if (chunk.type === 'error') {
+        flushContentNow(assistantId);
         patchAssistant(assistantId, {
           streaming: false,
           content: buffer
@@ -605,6 +648,7 @@ async function runSingleShot(
       }
     }
   } finally {
+    flushContentNow(assistantId);
     patchAssistant(assistantId, { streaming: false });
   }
 

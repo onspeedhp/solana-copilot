@@ -60,6 +60,37 @@ flowchart LR
 
 Three planes meet here: **the LLM** (Claude), **the browser** (DOM of whatever you're on), **the chain** (Solana wallet). The extension is the glue.
 
+## How it scales: one file = one site
+
+The interesting part isn't the wallet. It's that **anyone can teach the agent a new site by dropping a file**.
+
+```mermaid
+flowchart LR
+  dev([👷 dev]) -->|"drops src/lib/skills/marinade.ts"| file[(skill file)]
+  file -.->|"auto-discovered<br/>at build time"| ext[🪐 ai wallet]
+  user([👤 user]) -->|"best mSOL APY?"| ext
+  ext -->|"7.42%"| user
+
+  classDef u fill:#7c3aed,color:#fff,stroke:#a78bfa
+  classDef d fill:#10b981,color:#fff,stroke:#34d399
+  classDef e fill:#1c1c1c,color:#fff,stroke:#7c3aed
+  class user u
+  class dev d
+  class ext e
+```
+
+Each skill is a self-contained adapter:
+
+- **Domains it activates on** (`marinade.finance`)
+- **API tools** the AI can call when on that site (`marinadeAPY`, `getStakeAccount`)
+- **DOM extractor** that reads the page semantically (vault rows, token tiles, tweets)
+- **Context-aware suggestions** — chips that adapt to the URL pathname
+
+The loader uses `import.meta.glob('./*.ts', { eager: true })` — no central registry, no PR conflict on a list. Drop, build, reload. The AI now knows that site.
+
+Today: 6 skills shipped (Jupiter, Kamino, X, Pump.fun, DEX Screener, Solscan).
+Tomorrow: every Solana site you visit, if someone drops the file.
+
 ## Demo
 
 | | |

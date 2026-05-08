@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=1280" />
+    <title>solana-copilot — skill flow</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #0a0a0a;
+        color: #fff;
+        font-family:
+          'Inter',
+          -apple-system,
+          BlinkMacSystemFont,
+          sans-serif;
+        font-feature-settings: 'cv11';
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+      }
+
+      .canvas {
+        width: 1200px;
+        height: 720px;
+        background: radial-gradient(
+            1200px 600px at 80% 20%,
+            rgba(124, 58, 237, 0.08),
+            transparent 60%
+          ),
+          radial-gradient(
+            900px 600px at 10% 90%,
+            rgba(16, 185, 129, 0.05),
+            transparent 60%
+          );
+        position: relative;
+        padding: 56px 64px;
+      }
+
+      .title {
+        font-size: 26px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .title .dot {
+        color: #a78bfa;
+      }
+      .subtitle {
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.45);
+        margin-top: 6px;
+      }
+
+      .stage {
+        position: absolute;
+        inset: 130px 64px 64px 64px;
+        display: grid;
+        grid-template-columns: 240px 1fr 240px;
+        gap: 48px;
+        align-items: center;
+      }
+
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .col-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: rgba(255, 255, 255, 0.35);
+        margin-bottom: 4px;
+      }
+
+      .actor {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 18px;
+        border-radius: 14px;
+        background: #131313;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        font-size: 14px;
+      }
+      .actor.user {
+        border-color: rgba(124, 58, 237, 0.45);
+        box-shadow:
+          0 0 0 1px rgba(124, 58, 237, 0.12),
+          0 12px 30px -16px rgba(124, 58, 237, 0.5);
+      }
+      .actor.dev {
+        border-color: rgba(16, 185, 129, 0.4);
+        box-shadow:
+          0 0 0 1px rgba(16, 185, 129, 0.1),
+          0 12px 30px -16px rgba(16, 185, 129, 0.4);
+      }
+      .avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        flex-shrink: 0;
+      }
+      .actor.user .avatar {
+        background: rgba(124, 58, 237, 0.18);
+      }
+      .actor.dev .avatar {
+        background: rgba(16, 185, 129, 0.18);
+      }
+      .actor .name {
+        font-weight: 500;
+      }
+      .actor .role {
+        color: rgba(255, 255, 255, 0.45);
+        font-size: 12px;
+        margin-top: 2px;
+      }
+
+      .speech {
+        margin-top: 4px;
+        padding: 10px 12px;
+        font-size: 12.5px;
+        font-family:
+          'SF Mono',
+          'JetBrains Mono',
+          ui-monospace,
+          monospace;
+        border-radius: 10px;
+        background: rgba(124, 58, 237, 0.1);
+        border: 1px solid rgba(124, 58, 237, 0.25);
+        color: rgba(255, 255, 255, 0.9);
+        line-height: 1.5;
+      }
+      .file-card {
+        margin-top: 4px;
+        padding: 10px 12px;
+        font-size: 12.5px;
+        font-family:
+          'SF Mono',
+          'JetBrains Mono',
+          ui-monospace,
+          monospace;
+        border-radius: 10px;
+        background: rgba(16, 185, 129, 0.08);
+        border: 1px dashed rgba(16, 185, 129, 0.4);
+        color: rgba(255, 255, 255, 0.85);
+      }
+      .file-card .filename {
+        color: #6ee7b7;
+      }
+
+      .core {
+        position: relative;
+        height: 360px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .extension {
+        width: 100%;
+        background: linear-gradient(
+          180deg,
+          #1c1c1c 0%,
+          #161616 100%
+        );
+        border: 1px solid rgba(124, 58, 237, 0.45);
+        border-radius: 18px;
+        padding: 24px;
+        box-shadow:
+          0 0 0 1px rgba(124, 58, 237, 0.1),
+          0 30px 80px -30px rgba(124, 58, 237, 0.4);
+      }
+      .ext-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 18px;
+      }
+      .ext-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        background: linear-gradient(135deg, #7c3aed, #6d28d9);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+      }
+      .ext-name {
+        font-weight: 600;
+        font-size: 15px;
+      }
+      .ext-tag {
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.4);
+        margin-left: auto;
+      }
+      .ext-section-title {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: rgba(255, 255, 255, 0.4);
+        margin-bottom: 10px;
+      }
+      .skills-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+      .skill {
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        font-size: 12px;
+        font-family:
+          'SF Mono',
+          'JetBrains Mono',
+          ui-monospace,
+          monospace;
+        color: rgba(255, 255, 255, 0.85);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .skill .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #a78bfa;
+        flex-shrink: 0;
+      }
+      .skill.new {
+        border-color: rgba(16, 185, 129, 0.4);
+        background: rgba(16, 185, 129, 0.06);
+      }
+      .skill.new .dot {
+        background: #34d399;
+      }
+      .more {
+        padding: 8px 10px;
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.3);
+        text-align: center;
+      }
+
+      /* Arrows */
+      svg.arrows {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        overflow: visible;
+      }
+      .arrow-label {
+        position: absolute;
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.55);
+        background: #0a0a0a;
+        padding: 2px 8px;
+        border-radius: 999px;
+        white-space: nowrap;
+        font-family: inherit;
+      }
+
+      .footer {
+        position: absolute;
+        bottom: 28px;
+        left: 64px;
+        right: 64px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.35);
+      }
+      .footer .repo {
+        color: #a78bfa;
+        font-family:
+          'SF Mono',
+          'JetBrains Mono',
+          ui-monospace,
+          monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="canvas">
+      <div class="title">
+        solana-copilot<span class="dot"> · </span>one file = one site
+      </div>
+      <div class="subtitle">
+        users chat. devs drop a skill file. the agent learns.
+      </div>
+
+      <div class="stage">
+        <!-- LEFT: user -->
+        <div class="col">
+          <div class="col-label">User</div>
+          <div class="actor user">
+            <div class="avatar">👤</div>
+            <div>
+              <div class="name">you</div>
+              <div class="role">on marinade.finance</div>
+            </div>
+          </div>
+          <div class="speech">"best mSOL APY?"</div>
+        </div>
+
+        <!-- CENTER: extension -->
+        <div class="col core">
+          <div class="extension">
+            <div class="ext-header">
+              <div class="ext-icon">🪐</div>
+              <div class="ext-name">solana-copilot</div>
+              <div class="ext-tag">side panel</div>
+            </div>
+            <div class="ext-section-title">skills auto-discovered</div>
+            <div class="skills-grid">
+              <div class="skill"><div class="dot"></div>jupiter</div>
+              <div class="skill"><div class="dot"></div>kamino</div>
+              <div class="skill"><div class="dot"></div>x</div>
+              <div class="skill"><div class="dot"></div>pump.fun</div>
+              <div class="skill"><div class="dot"></div>solscan</div>
+              <div class="skill"><div class="dot"></div>dexscreener</div>
+              <div class="skill new"><div class="dot"></div>marinade</div>
+              <div class="more">+ yours →</div>
+              <div class="more">…</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT: dev -->
+        <div class="col">
+          <div class="col-label">Contributor</div>
+          <div class="actor dev">
+            <div class="avatar">👷</div>
+            <div>
+              <div class="name">any dev</div>
+              <div class="role">PR-friendly</div>
+            </div>
+          </div>
+          <div class="file-card">
+            <span class="filename">skills/marinade.ts</span>
+            <br />id, domains, tools, extractDom
+          </div>
+        </div>
+      </div>
+
+      <!-- Arrows overlay (pure SVG, positioned by viewBox) -->
+      <svg
+        class="arrows"
+        viewBox="0 0 1200 720"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <defs>
+          <marker
+            id="arrow-purple"
+            viewBox="0 0 10 10"
+            refX="8"
+            refY="5"
+            markerWidth="8"
+            markerHeight="8"
+            orient="auto"
+          >
+            <path d="M0,0 L10,5 L0,10 z" fill="#a78bfa" />
+          </marker>
+          <marker
+            id="arrow-green"
+            viewBox="0 0 10 10"
+            refX="8"
+            refY="5"
+            markerWidth="8"
+            markerHeight="8"
+            orient="auto"
+          >
+            <path d="M0,0 L10,5 L0,10 z" fill="#34d399" />
+          </marker>
+        </defs>
+
+        <!-- user → extension -->
+        <path
+          d="M 304 360 Q 380 360 460 360"
+          stroke="#a78bfa"
+          stroke-width="1.5"
+          fill="none"
+          marker-end="url(#arrow-purple)"
+        />
+        <!-- extension → user (response) -->
+        <path
+          d="M 460 380 Q 380 410 304 410"
+          stroke="rgba(167, 139, 250, 0.4)"
+          stroke-width="1.5"
+          fill="none"
+          stroke-dasharray="4 4"
+          marker-end="url(#arrow-purple)"
+        />
+
+        <!-- dev → extension -->
+        <path
+          d="M 896 360 Q 820 360 740 360"
+          stroke="#34d399"
+          stroke-width="1.5"
+          fill="none"
+          stroke-dasharray="6 4"
+          marker-end="url(#arrow-green)"
+        />
+      </svg>
+
+      <!-- Arrow labels -->
+      <div class="arrow-label" style="left: 320px; top: 332px;">
+        chats
+      </div>
+      <div class="arrow-label" style="left: 320px; top: 422px;">
+        7.42% APY
+      </div>
+      <div class="arrow-label" style="right: 320px; top: 332px;">
+        drops 1 file
+      </div>
+
+      <div class="footer">
+        <span>open source · MIT</span>
+        <span class="repo">github.com/onspeedhp/solana-copilot</span>
+      </div>
+    </div>
+  </body>
+</html>
